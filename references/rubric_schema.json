@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rubric (评价量规)",
+  "description": "一次作业的评分细则。量规由 agent（LLM）根据标准文档与需求文本生成，教师自然语言确认/修改。",
+  "type": "object",
+  "required": ["criteria"],
+  "properties": {
+    "title": { "type": "string", "description": "作业标题（可选）" },
+    "total": { "type": "number", "description": "总分，默认 100" },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/criterion" }
+    },
+    "uncovered": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "无法映射到抽取原语、或 LLM 也低置信的需求"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "量规覆盖需求的程度（0-1）"
+    },
+    "weight_note": { "type": "string", "description": "权重推断说明，供教师核对" }
+  },
+  "definitions": {
+    "criterion": {
+      "type": "object",
+      "required": ["label", "comparator", "expected", "weight"],
+      "properties": {
+        "id": { "type": "string", "description": "如 c1/c2" },
+        "label": { "type": "string", "description": "中文标题，如“左页边距”" },
+        "target": { "enum": ["word", "xlsx", "pptx"], "description": "文件类型" },
+        "primitive": { "type": "string", "description": "抽取原语名；命中 seed 表/用户库则确定性判定" },
+        "primitive_resolved": {
+          "type": "boolean",
+          "description": "true=命中确定性抽取；false=回落 LLM 判定"
+        },
+        "comparator": {
+          "enum": ["eq", "one_of", "geq", "range", "tol", "any_all"]
+        },
+        "expected": {
+          "description": "期望值。one_of/any_all 为非空数组；range/tol 为 [下限, 上限]/[值, 容差]；geq 为数值；eq 为标量/数组/dict"
+        },
+        "weight": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "正整数；全部 criterion 权重和 ≈ total"
+        },
+        "scope": {
+          "type": "object",
+          "description": "定位器，见 §4.6：title/body/text/para/table/cell/header/footer/image/comment/formula/page",
+          "properties": {
+            "type": {
+              "enum": ["title", "body", "text", "para", "table", "cell",
+                       "header", "footer", "image", "comment", "formula", "page"]
+            }
+          },
+          "required": ["type"]
+        },
+        "deduct": { "type": "string", "description": "扣分说明（人工可读）" },
+        "pass_note": { "type": "string", "description": "通过标准（人工可读）" }
+      }
+    }
+  }
+}

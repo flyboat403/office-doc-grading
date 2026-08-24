@@ -1,0 +1,61 @@
+{
+  "skill_name": "office-doc-grading",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我是《计算机应用基础》课程老师。这是作业的评分标准文档（C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\标准_论文排版.docx）和评分需求文本（C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\需求_论文排版.txt）。请按标准生成评分量规给我确认，然后批量批改 C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\ 目录下 张三_论文.docx 和 李四_论文.docx 两份学生 word 作业，输出每人的总分、等级、逐条扣分明细与可定位依据，汇总为 summary.xlsx（每份作业一个 sheet），每份作业生成一个 HTML 报告，并保存 rubric.json。",
+      "expected_output": "生成覆盖需求的评分量规 rubric.json；两份学生作业各得分数与扣分明细；summary.xlsx 两个明细 sheet；reports/ 两份 HTML。张三（合规）应明显高于李四（违规：页边距错、标题未加粗、正文字号不符、无页眉页脚、字数不足）。",
+      "files": [
+        "evals/files/标准_论文排版.docx",
+        "evals/files/需求_论文排版.txt",
+        "evals/files/张三_论文.docx",
+        "evals/files/李四_论文.docx"
+      ],
+      "expectations": [
+        "rubric.json 包含至少 6 条 criteria（页边距/标题加粗/正文字号/页眉/页码/字数），权重和≈100",
+        "rubric 通过 validate_rubric 校验（无非法 comparator/expected/weight）",
+        "summary.xlsx 含张三、李四两个明细 sheet，各 sheet 含总分/等级/逐条明细",
+        "张三得分 > 李四得分",
+        "李四的扣分明细包含页边距、标题加粗、字数、页眉至少 4 项失分依据",
+        "reports/ 下生成两份 <学生名>_report.html，且每份含逐条依据（实际值/期望/位置）"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我是《数据分析》课程老师。请按评分标准（C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\标准_成绩表.xlsx）和需求（C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\需求_成绩表.txt）生成评分量规，然后批量批改 C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\ 目录下 王五_成绩表.xlsx、孙七_成绩表.xlsx、赵六_成绩表.xlsx 三份学生 excel 作业，输出总分、等级、逐条扣分明细与依据，汇总为 summary.xlsx（每份作业一个 sheet），每份生成 HTML 报告，保存 rubric.json。",
+      "expected_output": "生成覆盖 8 项需求的量规（公式/冻结/合并/表格样式/筛选/条件格式/边框/多表）；三份得分梯度 王五 > 孙七 > 赵六；王五合规应得高分，赵六（无公式/冻结/合并/表格/筛选/条件格式/边框）应多项失分。",
+      "files": [
+        "evals/files/标准_成绩表.xlsx",
+        "evals/files/需求_成绩表.txt",
+        "evals/files/王五_成绩表.xlsx",
+        "evals/files/孙七_成绩表.xlsx",
+        "evals/files/赵六_成绩表.xlsx"
+      ],
+      "expectations": [
+        "rubric.json 覆盖公式/冻结窗格/合并单元格/表格样式/筛选/条件格式/边框/工作表数至少 7 项需求",
+        "summary.xlsx 含王五、孙七、赵六三个明细 sheet",
+        "得分梯度：王五 > 孙七 > 赵六",
+        "赵六失分项 ≥5（公式/冻结/合并/表格/筛选/条件格式/边框至少缺 5 项被扣分）",
+        "王五每项需求均有通过依据或至少总分 ≥ 90"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我是《职业规划》课程老师。请按评分标准（C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\标准_演示文稿.pptx）和需求（C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\需求_演示文稿.txt）生成评分量规，然后批量批改 C:\\Users\\fly04\\.agents\\skills\\office-doc-grading\\evals\\files\\ 目录下 钱七_演示.pptx 和 孙八_演示.pptx 两份学生 ppt 作业，输出总分、等级、逐条扣分明细与依据，汇总为 summary.xlsx（每份作业一个 sheet），每份生成 HTML 报告，保存 rubric.json。",
+      "expected_output": "生成覆盖 7 项需求的量规（页数/字号/备注/图片/切换/动画/居中）；钱七（合规）明显高于孙八（3 页、14 磅、无备注/图片/切换/动画/居中）。",
+      "files": [
+        "evals/files/标准_演示文稿.pptx",
+        "evals/files/需求_演示文稿.txt",
+        "evals/files/钱七_演示.pptx",
+        "evals/files/孙八_演示.pptx"
+      ],
+      "expectations": [
+        "rubric.json 覆盖页数/字号/备注/图片/切换/动画/居中至少 6 项需求",
+        "summary.xlsx 含钱七、孙八两个明细 sheet",
+        "钱七得分 > 孙八得分",
+        "孙八失分项 ≥5（页数/字号/备注/图片/切换/动画至少缺 5 项被扣分）",
+        "每份 report.html 含逐条依据（实际值/期望/位置）"
+      ]
+    }
+  ]
+}

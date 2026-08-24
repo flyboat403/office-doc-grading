@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# 用户原语库（运行时自学习落盘，不进仓库）
+primitives.json
+
+# 工作目录产物
+rubric.json
+judgments.json
+revision_history.json
+summary.xlsx
+summary.csv
+reports/
+*_annotated.docx
+
+# 系统
+.DS_Store
+Thumbs.db
