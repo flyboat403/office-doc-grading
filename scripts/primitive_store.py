@@ -120,10 +120,17 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
     entries = load()
     if cmd == "list":
-        for e in entries:
-            print("%s [%s] ft=%s usage=%s aliases=%s" % (
-                e.get("id"), e.get("status"), e.get("file_type"),
-                e.get("usage"), e.get("aliases")))
+        if not entries:
+            # 永不静默：空库也要显式说明，避免与"命令失效"混淆
+            print("（用户原语库为空，仅 seed 原语生效；库路径：%s）" % store_path())
+        else:
+            st = stats(entries)
+            print("用户原语库：total=%d active=%d by_type=%s（库路径：%s）" % (
+                st["total"], st["active"], st["by_file_type"], store_path()))
+            for e in entries:
+                print("  %s [%s] ft=%s usage=%s aliases=%s" % (
+                    e.get("id"), e.get("status"), e.get("file_type"),
+                    e.get("usage"), e.get("aliases")))
     elif cmd == "stats":
         print(json.dumps(stats(entries), ensure_ascii=False))
     elif cmd == "dedup":
@@ -132,3 +139,4 @@ if __name__ == "__main__":
         print("dedup done, total=%d" % len(entries))
     else:
         print("usage: python primitive_store.py [list|stats|dedup]")
+        sys.exit(2)

@@ -85,8 +85,11 @@ description: >-
 
 ## P3 量规生成
 
-1. **MANDATORY — 先读原语目录**（不要跳过）：运行 `python scripts/primitives.py` 取 seed
-   原语 JSON，再 `python scripts/primitive_store.py list` 取用户已学习的原语。这是映射的唯一依据。
+1. **MANDATORY — 先读原语目录**（不要跳过）：运行
+   `python scripts/primitives.py --type <word|xlsx|pptx>` 取该 file_type 的 seed 原语目录
+   （JSON `{原语名: hint}`；无参打印全部；`--counts` 看各类型条数），
+   再 `python scripts/primitive_store.py list` 取用户已学习的原语（空库会显式说明，不会静默）。
+   这是映射的唯一依据。
    **此处先不要加载 `references/rubric_schema.json`**——映射阶段（步骤 1-3）只需要原语清单；
    schema 在步骤 4 写量规时才参考。
 2. **需求→Criterion 映射决策树**（每个需求都走一遍）：
@@ -120,7 +123,8 @@ description: >-
  "uncovered":["整体美观"],
  "confidence":0.9,"weight_note":"6项均匀≈17分/项，归一化后自动调整"}
 ```
-5. 用 `python scripts/validate_rubric.py rubric.json` 校验；errors 非空就修正后重跑。
+5. 用 `python scripts/validate_rubric.py rubric.json` 校验：打印 `valid: N, errors: [...]`，
+   **errors 非空时退出码为 1**（与 role_check 的门禁语义一致），必须修正到 exit 0 才能继续。
 6. 校验通过后用 `python scripts/normalize_weights.py rubric.json` 归一化（结果写回 rubric.json）。
 7. 保存 rubric.json 到工作目录。
 

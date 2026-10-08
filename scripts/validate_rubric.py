@@ -147,7 +147,12 @@ def _scope_key(scope):
 if __name__ == "__main__":
     import sys
 
+    if len(sys.argv) < 2:
+        print("usage: python validate_rubric.py <rubric.json>")
+        sys.exit(2)
     with open(sys.argv[1], encoding="utf-8") as f:
         data = json.load(f)
     ok, errs = validate_rubric(data if isinstance(data, dict) else {"criteria": data})
     print("valid: %d, errors: %s" % (len(ok), errs))
+    # 门禁语义：errors 非空 → 退出码 1（与 role_check.py 一致），便于脚本化拦截
+    sys.exit(1 if errs else 0)

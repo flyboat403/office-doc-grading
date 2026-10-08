@@ -1,9 +1,10 @@
 # 抽取原语 seed 表
 
 > 唯一事实来源是 `scripts/primitives.py` 的 `PRIMITIVES` 注册表（本文档为人读摘要，若不一致以代码为准）。
-> 生成目录：`python scripts/primitives.py`（无参时打印 JSON 目录，见 `catalog()`）。
+> 生成目录：`python scripts/primitives.py`（无参打印全部 JSON 目录，见 `catalog()`；
+> `--type word|xlsx|pptx` 只看一类，`--counts` 打印各类条数）。
 > 动态补充：用户库（`~/.office-doc-grading/primitives.json`）中的 active 原语会与 seed 合并参与映射（§4.5）。
-> 计数核对：以下"word 59 / xlsx 22 / pptx 14"为当前 seed 实数，**以 `catalog()` 运行时输出为准**——
+> 计数核对：以下"word 59 / xlsx 22 / pptx 14"为当前 seed 实数，**以 `python scripts/primitives.py --counts` 为准**——
 > 新增/改名原语后请重跑生成，勿手改这里的数字。
 
 ## word（59 个）

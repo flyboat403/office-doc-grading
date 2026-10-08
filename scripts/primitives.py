@@ -805,11 +805,38 @@ if __name__ == "__main__":
     import json
     import sys
 
+    argv = sys.argv[1:]
+
+    # 无参（或首个参数为 --flag）：打印 seed 原语目录 JSON —— P3 映射的唯一依据。
+    #   python primitives.py                 # 全部 seed 目录 {name: hint}
+    #   python primitives.py --type word     # 仅 word（59 条）
+    #   python primitives.py --counts        # 各 file_type 计数
+    if not argv or argv[0].startswith("--"):
+        if "--counts" in argv:
+            counts = {t: len(FILE_TYPES[t]) for t in FILE_TYPES}
+            counts["total"] = len(PRIMITIVES)
+            print(json.dumps(counts, ensure_ascii=False, indent=1))
+            sys.exit(0)
+        ft = None
+        if "--type" in argv:
+            i = argv.index("--type")
+            if i + 1 < len(argv):
+                ft = argv[i + 1]
+            if ft is not None and ft not in FILE_TYPES:
+                print("unknown --type %r（可选：%s）" % (ft, ", ".join(FILE_TYPES)))
+                sys.exit(2)
+        print(json.dumps(catalog(ft), ensure_ascii=False, indent=1))
+        sys.exit(0)
+
+    # 形态：primitives.py <文件> <名字1,名字2,...> —— 对给定文件现场抽取原语验证
     from parsers import parse_file
 
-    if len(sys.argv) >= 3:
-        d = parse_file(sys.argv[1])
-        names = sys.argv[2].split(",")
-        for n in names:
+    if len(argv) >= 2:
+        d = parse_file(argv[0])
+        for n in argv[1].split(","):
             v, ok = extract(n, d)
             print("%s = %r (ok=%s)" % (n, v, ok))
+        sys.exit(0)
+
+    print(__doc__)
+    sys.exit(2)
