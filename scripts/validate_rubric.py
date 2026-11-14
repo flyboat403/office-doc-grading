@@ -64,6 +64,10 @@ def _primitive_type(criterion):
 def validate_rubric(rubric):
     """rubric: {criteria: [...], total, ...}。返回 (criteria, errors)。"""
     criteria = rubric.get("criteria", []) if isinstance(rubric, dict) else []
+    # 修正（2026-11-14，F3）：空量规此前 0 错误放行，下游 normalize 会
+    # ZeroDivisionError——门禁必须在源头拦住。
+    if not criteria:
+        return [], [(0, "criteria 为空：至少需要 1 条 criterion")]
     out, errors = [], []
     seen = set()
     for i, c in enumerate(criteria):

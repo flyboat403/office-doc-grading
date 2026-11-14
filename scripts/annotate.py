@@ -157,12 +157,22 @@ def annotate_docx(data, diffs):
         if not (0 <= idx < len(paras)):
             idx = body_list[-1] if body_list else 0
         p = paras[idx]
-        p.addprevious(etree.fromstring(
-            '<w:commentRangeStart xmlns:w="%s" w:id="%s"/>' % (_W, cid)))
+        # 修正（2026-11-14，F2）：commentRangeStart/End 是段落内容级元素，
+        # 必须位于 w:p 内部。旧实现把它们作为 w:body 的直接子级插入
+        # （schema 违规，Word 可能报"无法读取的内容"），且同段多批注时区间
+        # 交叉。现在：start 插在 pPr 之后（pPr 必须保持段首）、end 追加段末，
+        # 包住 commentReference run；同段多批注形成合法嵌套区间。
+        start = etree.Element(_w("commentRangeStart"))
+        start.set(_w("id"), cid)
+        ppr = p.find(_w("pPr"))
+        if ppr is not None:
+            ppr.addnext(start)
+        else:
+            p.insert(0, start)
         r = etree.SubElement(p, _w("r"))
         etree.SubElement(r, _w("commentReference")).set(_w("id"), cid)
-        p.addnext(etree.fromstring(
-            '<w:commentRangeEnd xmlns:w="%s" w:id="%s"/>' % (_W, cid)))
+        end = etree.SubElement(p, _w("commentRangeEnd"))
+        end.set(_w("id"), cid)
         c = etree.SubElement(comments_el, _w("comment"))
         c.set(_w("id"), cid)
         c.set(_w("author"), COMMENT_AUTHOR)

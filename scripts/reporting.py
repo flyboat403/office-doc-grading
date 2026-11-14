@@ -19,6 +19,7 @@
 """
 from __future__ import annotations
 
+import html
 import re
 from pathlib import Path
 
@@ -90,22 +91,41 @@ def _position_from_scope(scope):
     return str(scope)
 
 
-def _sheet_name(student_name, wb):
-    """由学生名生成合法 sheet 名（<=31 字符，去非法字符）。同名 sheet 以"替换"刷新，不追加序号。"""
-    name = re.sub(r'[:\\/?*\[\]]', "_", str(student_name)).strip() or "学生"
-    if len(name.encode("utf-8", "ignore")) > 31:
-        name = name[:31]
-    return name or "学生"
+def _safe_name(name):
+    """学生名 → 可安全用作文件名/sheet 名的字符串（Excel sheet 上限 31 字符）。
+
+    修正（2026-11-14）：旧实现按 UTF-8 字节数判断超长（中文名 >10 字就触发），
+    而 Excel 的上限是 31 个字符；同时补去首尾单引号（Excel sheet 名规则），
+    并合并文件名非法字符（<>"|，Windows 路径会用）。
+    """
+    name = re.sub(r'[:\\/?*\[\]<>"|]', "_", str(name)).strip("'")
+    return (name[:31] or "学生")
+
+
+def _sheet_name(student_name):
+    """由学生名生成合法 sheet 名。同名 sheet 以"替换"刷新，不追加序号。"""
+    return _safe_name(student_name)
 
 
 def _load_or_create(out_dir):
-    """打开既有汇总 workbook（追加），否则新建。返回 (wb, path)。"""
+    """打开既有汇总 workbook（追加），否则新建。返回 (wb, path)。
+
+    修正（2026-11-14，F7）：旧实现损坏时静默换新 Workbook——之前所有学生的
+    sheet 无提示丢失。现在先把损坏文件备份为 *.corrupt.bak 并打印警告。
+    """
     path = Path(out_dir) / SUMMARY_FILE
     if path.exists() and _HAS_OPENPYXL:
         try:
             return load_workbook(path), path
-        except Exception:
-            pass
+        except Exception as e:
+            bak = path.with_name(path.name + ".corrupt.bak")
+            try:
+                path.replace(bak)
+                print("[reporting] 警告：%s 无法打开（%s），已备份为 %s 后新建汇总簿；"
+                      "此前学生的 sheet 见备份文件" % (path.name, e, bak.name))
+            except OSError:
+                print("[reporting] 警告：%s 无法打开（%s）且备份失败，将新建汇总簿"
+                      % (path.name, e))
     return Workbook(), path
 
 
@@ -113,7 +133,7 @@ def _write_student_sheet(wb, student_name, file_name, results, scoring, uncovere
     """向 wb 写入一个学生的明细 sheet（与 HTML 报告同构）。"""
     pct = scoring["pct"]
     level = scoring.get("level") or level_of(pct)
-    title = _sheet_name(student_name, wb)
+    title = _sheet_name(student_name)
     if title in wb.sheetnames:
         del wb[title]
     ws = wb.create_sheet(title=title)
@@ -212,6 +232,9 @@ def build_report(student_name, file_name, results, scoring, out_dir, uncovered=N
     pct = scoring["pct"]
     level = scoring.get("level") or level_of(pct)
 
+    def esc(v):
+        return html.escape(str(v), quote=False)
+
     def row(r):
         c = r["criterion"]
         cls = "pass" if r["ok"] else ("review" if r.get("need_review") else "fail")
@@ -220,18 +243,20 @@ def build_report(student_name, file_name, results, scoring, out_dir, uncovered=N
         actual = _fmt(r.get("actual"))
         expected = _fmt(r.get("expected"))
         deduct = c.get("deduct", "") or ("" if r["ok"] else "未达到要求")
+        # 修正（2026-11-14）：报告字段含文档派生文本（label/evidence/actual…），
+        # 一律 html.escape，避免学生文档内容注入报告 HTML
         return (
-            f"<tr class='{cls}'><td>{c.get('label','')}</td><td>{verdict}</td>"
-            f"<td>{r['weight']}</td><td>{actual}</td><td>{expected}</td>"
-            f"<td>{pos}</td><td>{r.get('evidence','')}</td><td>{deduct}</td></tr>"
+            f"<tr class='{cls}'><td>{esc(c.get('label',''))}</td><td>{verdict}</td>"
+            f"<td>{esc(r['weight'])}</td><td>{esc(actual)}</td><td>{esc(expected)}</td>"
+            f"<td>{esc(pos)}</td><td>{esc(r.get('evidence',''))}</td><td>{esc(deduct)}</td></tr>"
         )
 
     items = "".join(row(r) for r in results)
     uncovered_html = ""
     if uncovered:
         uncovered_html = "<h2>未覆盖需求</h2><ul>%s</ul>" % "".join(
-            "<li>%s</li>" % u for u in uncovered)
-    html = f"""<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>作业评分报告</title>
+            "<li>%s</li>" % esc(u) for u in uncovered)
+    page = f"""<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>作业评分报告</title>
 <style>
 body{{font-family:'Microsoft YaHei',sans-serif;margin:24px}}
 table{{border-collapse:collapse;width:100%;table-layout:fixed}}
@@ -240,15 +265,16 @@ th{{background:#f5f5f5}}
 .pass{{background:#e8f5e9}}.fail{{background:#ffebee}}.review{{background:#fff8e1}}
 h1{{font-size:20px}}.score{{font-size:26px;color:#1565c0}}
 </style></head><body><h1>作业评分报告</h1>
-<p>文件：{file_name}　学生：{student_name}</p>
-<p class="score">总分 {scoring['score']} / {scoring['max_score']}（{pct}%）　等级：{level}</p>
+<p>文件：{esc(file_name)}　学生：{esc(student_name)}</p>
+<p class="score">总分 {esc(scoring['score'])} / {esc(scoring['max_score'])}（{esc(pct)}%）　等级：{esc(level)}</p>
 <h2>逐条明细</h2>
 <table><tr><th style="width:14%">评分项</th><th style="width:6%">结论</th><th style="width:6%">分值</th>
 <th style="width:12%">实际值</th><th style="width:12%">期望值</th><th style="width:12%">位置</th>
 <th>依据</th><th style="width:10%">扣分说明</th></tr>{items}</table>
 {uncovered_html}
 </body></html>"""
-    (reports / ("%s_report.html" % student_name)).write_text(html, encoding="utf-8")
+    out_name = _safe_name(student_name)
+    (reports / ("%s_report.html" % out_name)).write_text(page, encoding="utf-8")
 
     return {"summary_xlsx": str(xlsx_path) if xlsx_path else None,
-            "report_html": str(reports / ("%s_report.html" % student_name))}
+            "report_html": str(reports / ("%s_report.html" % out_name))}

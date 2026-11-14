@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -101,30 +102,33 @@ def check_p5(std_path, student_paths):
     if not is_office(std):
         return {"ok": False, "error": "标准文档非 office 类型: %s" % std,
                 "student_files": []}
+    # Windows 路径大小写不敏感：normcase 后比较，避免同文件不同写法绕过自评拦截
+    std_key = os.path.normcase(str(std))
 
     wholes = [Path(sp).resolve() for sp in student_paths]
     stu_files = []
     missing = []
+    skipped = []  # 提供了但非 office 类型（不再误报为 missing）
     conflicts = []
     for w in wholes:
         if not w.exists():
             missing.append(str(w))
             continue
         if w.is_dir():
+            # 修正（2026-11-14）：移除目录分支里的死代码冲突循环——
+            # 过滤条件已排除 std，内层循环永不命中
             subs = sorted(f for f in w.iterdir()
-                          if f.is_file() and is_office(f) and f.resolve() != std)
+                          if f.is_file() and is_office(f)
+                          and os.path.normcase(str(f.resolve())) != std_key)
             stu_files.extend(subs)
-            for f in subs:
-                if f.resolve() == std:
-                    conflicts.append(str(f))
         else:
             if is_office(w):
-                if w == std:
+                if os.path.normcase(str(w)) == std_key:
                     conflicts.append(str(w))
                 else:
                     stu_files.append(w)
             else:
-                missing.append(str(w))
+                skipped.append(str(w))
 
     errors = []
     if not stu_files:
@@ -136,8 +140,10 @@ def check_p5(std_path, student_paths):
         "ok": not errors and not missing,
         "errors": errors,
         "missing": missing,
+        "skipped": skipped,
         "student_files": [str(f) for f in stu_files],
-        "note": "角色判定以教师指定为准；此处仅拦截'标准当学生'与'无学生文件'两类硬错误",
+        "note": ("角色判定以教师指定为准；此处仅拦截'标准当学生'与'无学生文件'"
+                 "两类硬错误；非 office 文件列入 skipped 不参与评分"),
     }
 
 

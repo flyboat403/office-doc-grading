@@ -15,6 +15,9 @@
 """
 from __future__ import annotations
 
+import os
+import re
+import sys
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -26,6 +29,16 @@ except Exception:  # pragma: no cover
 
 ZIP_MAX_ENTRIES = 200
 ZIP_MAX_UNCOMPRESSED = 50 * 1024 * 1024
+
+
+def _dbg(msg):
+    """best-effort 吞错的可观测闸（F5）：OFFICE_DOC_GRADING_DEBUG=1 时打 stderr。
+
+    设计不变：单点提取失败仍不中断整体；只是让"静默跳过"可被发现，
+    避免水印检测失效这类系统性 bug 长期不可见。
+    """
+    if os.environ.get("OFFICE_DOC_GRADING_DEBUG"):
+        print("[parsers] %s" % msg, file=sys.stderr)
 
 
 class ParseError(Exception):
@@ -256,8 +269,10 @@ def _xml_root(data):
     if etree is None:
         return None
     try:
-        return etree.fromstring(data)
-    except Exception:
+        # resolve_entities=False：文档来自不可信上传，禁实体展开（防 XXE/billion-laughs 加固）
+        return etree.fromstring(data, etree.XMLParser(resolve_entities=False))
+    except Exception as e:
+        _dbg("xml parse failed: %s" % e)
         return None
 
 
@@ -284,26 +299,47 @@ def _word_part(zf, name):
 
 def _parse_word(zf, data):
     from docx import Document
+    from docx.enum.section import WD_ORIENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     doc = Document(BytesIO(data))
     paragraphs = []
     for i, p in enumerate(doc.paragraphs):
-        run = next((r for r in p.runs if r.text and r.text.strip()), None)
+        # 修正（2026-11-14，F4）：不再以单个首 run 代表整段——
+        # bold/italic/underline 取所有非空 run 的"任一"语义，并回退样式级定义
+        # （Heading 等样式的加粗写在样式里，run.bold 直接格式为 None，旧实现漏读）。
+        runs = [r for r in p.runs if r.text and r.text.strip()]
         para = {
             "index": i,
             "text": p.text,
             "style": p.style.name if p.style else None,
             "align": _align_name(p.alignment),
         }
-        if run is not None:
-            para["font_name"] = _run_font_names(run) or None
-            para["font_size"] = (run.font.size.pt if run.font.size else None)
-            para["bold"] = bool(run.bold)
-            para["italic"] = bool(run.italic)
-            para["underline"] = bool(run.underline)
-            para["font_color"] = _run_color(run)
-            para["highlight"] = _hl_color(run)
+        if runs:
+            # 修正（2026-11-14，F4）：bold/italic/underline 取所有非空 run 的
+            # "任一"语义并回退样式级定义（Heading 样式的加粗写在样式里，
+            # run.bold 直接格式为 None，旧实现漏读）；run 无显式字号时回退样式字号。
+            # 边界（2026-11-14 实测）：仅在段落有非空 run 时计算——空段落标记
+            # 不渲染文本，若也回退样式字号（如 Normal 10.5pt），会给 font_size
+            # 集合混入假值（test1学生.docx 空段曾致"正文四号"误判）。
+            first = runs[0]
+            st_font = p.style.font if p.style is not None else None
+
+            def _fmt_flag(getter):
+                v = any(bool(getter(r)) for r in runs)
+                if not v and st_font is not None:
+                    v = bool(getter(st_font))
+                return v
+
+            para["font_name"] = _run_font_names(first) or None
+            para["font_size"] = (first.font.size.pt if first.font.size else None)
+            if not para["font_size"] and st_font is not None and st_font.size:
+                para["font_size"] = st_font.size.pt
+            para["font_color"] = _run_color(first)
+            para["highlight"] = _hl_color(first)
+            para["bold"] = _fmt_flag(lambda r: r.bold)
+            para["italic"] = _fmt_flag(lambda r: r.italic)
+            para["underline"] = _fmt_flag(lambda r: r.underline)
         try:
             pf = p.paragraph_format
             para["first_line_indent"] = _cm(pf.first_line_indent)
@@ -403,7 +439,8 @@ def _parse_word(zf, data):
                 "margin_right_cm": _cm(sec.right_margin),
                 "paper_w_cm": _cm(sec.page_width),
                 "paper_h_cm": _cm(sec.page_height),
-                "orientation": "landscape" if sec.orientation == 1 else "portrait",
+                "orientation": ("landscape" if sec.orientation == WD_ORIENT.LANDSCAPE
+                                else "portrait"),
                 "gutter_cm": _cm(sec.gutter),
                 "header": sec.header.paragraphs[0].text if sec.header.paragraphs else "",
                 "footer": sec.footer.paragraphs[0].text if sec.footer.paragraphs else "",
@@ -500,17 +537,15 @@ def _parse_word(zf, data):
         page_breaks = _count_xpath(root, ".//w:br[@w:type='page']", _W_NS)
         track_changes = (_count_xpath(root, ".//w:ins", _W_NS) > 0 or
                          _count_xpath(root, ".//w:del", _W_NS) > 0)
-        watermark = _count_xpath(root, ".//w:watermark", _W_NS) > 0
+        # 修正（2026-11-14，F1）：移除 ".//w:watermark" XPath —— OOXML 无此元素，
+        # 旧实现恒为 False。水印改为在下方扫描 header*.xml 的 VML shape。
         toc = (_count_xpath(root, ".//w:fldSimple[@w:instr[contains(.,'TOC')]]", _W_NS) > 0 or
-               any("TOC" in (el.get("w:instr") or "") for el in
-                   root.findall(".//w:fldChar", _W_NS) if False) or
                _count_xpath(root, ".//w:instrText[contains(.,'TOC')]", _W_NS) > 0)
 
     # 页脚直读（sdt 包裹时 python-docx 取不到正文）：文本 + PAGE 域检测
     footer_page_field = False
     try:
         for nm in zf.namelist():
-            import re
             if not re.match(r"word/footer\d+\.xml$", nm):
                 continue
             fx = _xml_root(zf.read(nm))
@@ -519,8 +554,34 @@ def _parse_word(zf, data):
             if (_count_xpath(fx, ".//w:instrText[contains(.,'PAGE')]", _W_NS) > 0 or
                     _count_xpath(fx, ".//w:fldSimple[@w:instr[contains(.,'PAGE')]]", _W_NS) > 0):
                 footer_page_field = True
-    except Exception:
-        pass
+    except Exception as e:
+        _dbg("footer scan failed: %s" % e)
+
+    # 水印直读（修正 F1，2026-11-14）：Word 水印实际存于 header*.xml 的
+    # VML <w:pict><v:shape type="#_x0000_t136">（textpath 承载水印文字），
+    # document.xml 中不存在 w:watermark 元素。同时扫 document 兜底自绘水印。
+    watermark = False
+    try:
+        V = "{urn:schemas-microsoft-com:vml}"
+        for nm in zf.namelist():
+            if not re.match(r"word/(header|document)\d*\.xml$", nm):
+                continue
+            wx = _xml_root(zf.read(nm))
+            if wx is None:
+                continue
+            for shp in wx.findall(".//%sshape" % V):
+                ident = " ".join(filter(None, (
+                    shp.get("type") or "",
+                    shp.get("id") or "",
+                    shp.get("{urn:schemas-microsoft-com:office:office}spid") or "")))
+                if ("_x0000_t136" in ident or "watermark" in ident.lower()
+                        or "powerpluswatermark" in ident.lower()):
+                    watermark = True
+                    break
+            if watermark:
+                break
+    except Exception as e:
+        _dbg("watermark scan failed: %s" % e)
 
     try:
         pg_num_fmt = pg_num_start = None
@@ -674,6 +735,9 @@ def _parse_xlsx(zf, data):
     except Exception:
         pass
 
+    # 注意（已知限制）：xlsx 无段落概念，此伪段落仅供 text/char_count 类原语
+    # 有合理取值；它不是工作表内容全文，字数/正文类需求勿基于它判定
+    # （应记 uncovered 或走 LLM 回落）。
     paragraphs = [{"index": 0, "text": "工作表: %s" % "、".join(wb.sheetnames[:10]),
                    "style": None}]
     return ParsedDoc(
@@ -780,7 +844,7 @@ def _parse_ppt(zf, data):
     aspect = None
     try:
         sw, sh = prs.slide_width, prs.slide_height
-        if sw and sh and sh:
+        if sw and sh:
             ratio = float(sw) / float(sh)
             aspect = "16:9" if ratio > 1.5 else ("4:3" if ratio < 1.5 else "other")
     except Exception:

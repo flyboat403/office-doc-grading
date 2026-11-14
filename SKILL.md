@@ -41,6 +41,9 @@ description: >-
 **python3 + python-docx + openpyxl + python-pptx + lxml**。
 本仓库 `E:\opencode\GradingServer\.venv\Scripts\python.exe` 已具备，找不到时优先用它。
 脚本位于 `<skill>/scripts/`，均可直接运行（`python parsers.py <file>` 打印解析摘要）。
+改动脚本后先跑单元回归：`python -m pytest <skill>/tests -q`（覆盖比较器/校验/归一化/
+定位/解析/批注/报告的边界形态）。排障时可设 `OFFICE_DOC_GRADING_DEBUG=1`，
+让解析器与原语的 best-effort 吞错打到 stderr（默认静默，不改变"单点失败不中断"语义）。
 
 ## 端到端流程
 

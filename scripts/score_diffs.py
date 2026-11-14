@@ -58,8 +58,7 @@ def grade_criteria(parsed, criteria, judge_llm=None):
                 continue
         if judge_llm is not None:
             try:
-                judged = judge_llm(c, parsed)
-                ok, evidence = judged
+                ok, evidence = judge_llm(c, parsed)
             except Exception as e:
                 results.append({
                     "criterion": c, "ok": False, "weight": c["weight"],
@@ -67,11 +66,13 @@ def grade_criteria(parsed, criteria, judge_llm=None):
                     "resolved": False, "need_review": True, "actual": None,
                 })
                 continue
-            if judged is None or not evidence:
-                # 回调判不出（返回 None 或无定位依据）→ 待复核，不硬判通过/不通过
+            if not evidence:
+                # 回调未给出定位依据 → 待复核，不硬判通过/不通过
+                # （清理 2026-11-14：judged is None 分支不可达——None 解包
+                #  会先在上面抛 TypeError 被捕获）
                 results.append({
                     "criterion": c, "ok": False, "weight": c["weight"],
-                    "evidence": (evidence or "LLM 判定未给出可信依据"),
+                    "evidence": "LLM 判定未给出可信依据",
                     "resolved": False, "need_review": True, "actual": None,
                 })
                 continue

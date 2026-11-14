@@ -45,8 +45,12 @@ def save(entries):
     p.write_text(json.dumps(entries, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-def find(entries, name):
+def find(entries, name, file_type=None):
+    """按 id/alias 查找。修正（2026-11-14）：可选 file_type 过滤——
+    不同文件类型的原语同名/同别名此前会互相挡住。"""
     for e in entries:
+        if file_type is not None and e.get("file_type") != file_type:
+            continue
         if e.get("id") == name or name in e.get("aliases", []):
             return e
     return None
@@ -57,7 +61,7 @@ def add(entries, entry, bump_existing=True):
     name = entry.get("id")
     if not name:
         return entries, False, None
-    existing = find(entries, name)
+    existing = find(entries, name, entry.get("file_type"))
     if existing is not None:
         if bump_existing:
             existing["usage"] = existing.get("usage", 0) + 1
@@ -118,7 +122,9 @@ if __name__ == "__main__":
     import sys
 
     cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
-    entries = load()
+    # 修正（2026-11-14）：读操作（list/stats/dedup 前的查看）不再落盘创建库文件——
+    # 旧实现 load() 默认 create=True，查询一次就在 ~/.office-doc-grading/ 建文件
+    entries = load(create=False)
     if cmd == "list":
         if not entries:
             # 永不静默：空库也要显式说明，避免与"命令失效"混淆

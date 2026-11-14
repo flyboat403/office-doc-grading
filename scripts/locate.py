@@ -10,6 +10,10 @@ scope 是定位器，回答"从文档哪里取特征"。resolve_scope 返回定�
 - 新增：table / cell / header / footer / image / comment / formula（元素索引）
 - 受限：page（仅 first/last，用分节信息近似；文档需写明精度限制）
 - 后置：shape 不支持
+
+已知启发式（2026-11-14 补记）：title 无样式命中时回退"文档第一个非空段落"。
+对无 Title/Heading 样式的文档，"标题居中"这类需求会落到首段——建议量规里
+需要精确定位时改用 text scope 锚定，或教师在 P4 确认时留意该近似。
 """
 from __future__ import annotations
 

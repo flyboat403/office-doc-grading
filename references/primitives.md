@@ -28,7 +28,7 @@
 | gutter_pos | string | - | 装订线位置：left/right（无 gutterPos 属性时缺省=left） |
 | header_text / footer_text | string | - | 首页节页眉/页脚文本 |
 | header_highlight | string | - | 页眉突出显示颜色（yellow 等） |
-| page_number | bool | - | 有页码（pgNumType / 页脚 PAGE 域） |
+| page_number | bool | - | 有页码（pgNumType / 页脚 PAGE 域）；页眉含任意数字不再算证据，无可信证据时返回 None（→ need_review） |
 | page_number_fmt | string | - | 页码格式 fmt（numberInDash≈"-1-,-2-,-3-"类型） |
 | page_number_start | number | 页 | 页码起始值 |
 | page_break | bool | - | 有分页符 |
@@ -46,7 +46,7 @@
 | track_changes | bool | - | 修订 |
 | watermark | bool | - | 水印 |
 | toc | bool | - | 目录 |
-| bullet | bool | - | 项目符号/编号（按样式名近似） |
+| bullet | bool | - | 项目符号/编号（按样式名近似：List Bullet/List Number/List Paragraph/列表/编号） |
 | para_shading | bool | - | 作用域内是否有有效段落底纹（shd 且 fill/themeFill/themeColor 非空） |
 | para_border | bool | - | 作用域内是否有有效段落边框（pBdr 存在且非全 none） |
 | widow_control | bool | - | 作用域内是否设置孤行控制（段落 pPr 含 w:widowControl 非 val=0） |
@@ -102,6 +102,11 @@
 ## scope 支持（§4.6）
 
 - 段落类原语（font_*/bold/align_*/indent/line_spacing/space_*）：支持 title/body/text/para scope。
+- title 定位启发式：无 Title/Heading 样式命中时回退"文档第一个非空段落"——
+  需要精确定位时用 text scope 锚定，并在 P4 提请教师留意该近似。
+- bold/italic/underline 语义：取作用域内所有非空 run 的"任一"，并回退样式级定义
+  （Heading 样式的加粗写在样式里，run 级直接格式为 None）；font_size 取首个非空
+  run，run 未显式设置时回退样式字号。
 - widow_control / top_line_punct：支持 title/body/text/para scope（按段落 pPr 直读）。
 - page_border / column_two / column_sep：节级检测，scope 通常忽略（存在性判定）；段落归属节精确判定走 LLM。
 - 表格类（table_*）：支持 table/cell scope。

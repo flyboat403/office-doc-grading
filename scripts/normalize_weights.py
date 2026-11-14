@@ -18,9 +18,16 @@ def normalize_weights(criteria, total=100):
             continue
         clean.append(c)
     criteria = clean
+    # 修正（2026-11-14，F3）：空输入此前会在余数分配处 ZeroDivisionError
+    if not criteria:
+        return [], 0.0, False
     s = sum(c.get("weight", 0) for c in criteria) or 1
     if s == total:
-        return criteria, 0.0, False
+        # 早退分支同样执行非正权重钳制（此前 0/负权重会原样放行）
+        return [dict(c, weight=1) if (not isinstance(c.get("weight"), (int, float))
+                                      or isinstance(c.get("weight"), bool)
+                                      or c["weight"] <= 0) else c
+                for c in criteria], 0.0, False
     scale = total / s
     norm, fracs = [], []
     for c in criteria:

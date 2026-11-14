@@ -17,10 +17,19 @@
 """
 from __future__ import annotations
 
+import os
+import sys
+
 try:
     from . import locate
 except ImportError:  # 直接以脚本运行时（python primitives.py）
     import locate  # type: ignore
+
+
+def _dbg(msg):
+    """best-effort 吞错的可观测闸（F5）：OFFICE_DOC_GRADING_DEBUG=1 时打 stderr。"""
+    if os.environ.get("OFFICE_DOC_GRADING_DEBUG"):
+        print("[primitives] %s" % msg, file=sys.stderr)
 
 # --------------------------------------------------------------------------
 # 比较器
@@ -241,14 +250,21 @@ def _footer_text(doc, scope):
 
 
 def _page_number(doc, scope):
-    """有页码设置（pgNumType 或页脚 PAGE 域或页眉页脚含数字）即认为有页码。"""
+    """有页码设置（pgNumType 或页脚 PAGE 域）才算有页码。
+
+    修正（2026-11-14，F6）：不再把页眉/页脚文本里的任意数字当页码——
+    "2026年度报告"会误报。无 PAGE 域且无 pgNumType 时返回 None
+    （无法确定性判定 → need_review），而不是硬给 False/True。
+    """
     for s in doc.sections:
         if s.get("page_number_fmt"):
             return True
     if getattr(doc, "footer_page_field", False):
         return True
     blob = (doc.header_text or "") + (doc.footer_text or "")
-    return bool(blob and ("PAGE" in blob or any(c.isdigit() for c in blob)))
+    if "PAGE" in blob:
+        return True
+    return None  # 无可信证据 → 判不了，交教师复核
 
 
 def _page_break(doc, scope):
@@ -323,7 +339,10 @@ def _toc(doc, scope):
 
 
 def _bullet(doc, scope):
-    return any((p.get("style") or "").lower() in ("list bullet", "list", "列表")
+    # 样式名近似（2026-11-14 补充）：Word 的 List Paragraph/编号样式此前漏读
+    bullet_names = {"list bullet", "list", "列表", "list number",
+                    "编号", "list paragraph", "列表段落"}
+    return any((p.get("style") or "").lower() in bullet_names
                for p in doc.paragraphs)
 
 
@@ -414,7 +433,11 @@ def _caption(doc, scope):
 # --------------------------------------------------------------------------
 
 def _para_flag_any(doc, scope, key):
-    """作用域内任一非空段落是否开启该布尔控制项（widowControl/topLinePunct）。"""
+    """作用域内任一非空段落是否开启该布尔控制项（widowControl/topLinePunct）。
+
+    修正（2026-11-14）：作用域内无段落（total==0）时返回 None（无法判定），
+    与 _para_val 的约定一致——旧实现返回 False，会把"判不了"变"判负"。
+    """
     hits, total = [], 0
     for p in doc.paragraphs:
         if not _in_scope(doc, scope, p):
@@ -424,7 +447,7 @@ def _para_flag_any(doc, scope, key):
         if v is True:
             hits.append(p)
     if total == 0:
-        return False
+        return None
     return bool(hits)
 
 
@@ -794,7 +817,8 @@ def extract(name, parsed, scope=None):
     fn, meta = item
     try:
         v = fn(parsed, scope)
-    except Exception:
+    except Exception as e:
+        _dbg("extract(%s) failed: %s" % (name, e))
         v = None
     if v is None:
         return None, False
@@ -813,8 +837,21 @@ if __name__ == "__main__":
     #   python primitives.py --counts        # 各 file_type 计数
     if not argv or argv[0].startswith("--"):
         if "--counts" in argv:
-            counts = {t: len(FILE_TYPES[t]) for t in FILE_TYPES}
+            # 修正（2026-11-14）：按 PRIMITIVES×FILE_TYPES 归属统计，
+            # 并自检两表是否脱节（有原语不在任何 FILE_TYPES → catalog 不可见）
+            counts, unregistered = {}, []
+            for name in PRIMITIVES:
+                hit = next((t for t, members in FILE_TYPES.items()
+                            if name in members), None)
+                if hit is None:
+                    unregistered.append(name)
+                else:
+                    counts[hit] = counts.get(hit, 0) + 1
             counts["total"] = len(PRIMITIVES)
+            if unregistered:
+                counts["UNREGISTERED(不在FILE_TYPES，catalog不可见)"] = unregistered
+                print(json.dumps(counts, ensure_ascii=False, indent=1))
+                sys.exit(1)
             print(json.dumps(counts, ensure_ascii=False, indent=1))
             sys.exit(0)
         ft = None
