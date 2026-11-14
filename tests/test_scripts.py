@@ -20,6 +20,7 @@ from locate import resolve_scope
 from score_diffs import grade_criteria, score_diffs
 from reporting import build_report
 from annotate import annotate_docx
+from role_check import check_p5
 
 EVALS = Path(__file__).resolve().parents[1] / "evals" / "files"
 STD_DOCX = EVALS / "标准_论文排版.docx"
@@ -174,6 +175,23 @@ class TestNormalizeWeights:
     def test_zero_weight_clamped_in_early_return(self):
         norm, _, _ = normalize_weights([_crit(weight=0), _crit(weight=100)])
         assert all(c["weight"] > 0 for c in norm)
+
+    def test_early_return_dev_reflects_drift(self):  # N4
+        # [0,100] 钳成 [1,100]，和=101≠100，dev 不得仍报 0.0
+        norm, dev, _ = normalize_weights([_crit(weight=0), _crit(weight=100)])
+        assert dev > 0
+
+
+class TestRoleCheckP5:
+    def test_missing_std_includes_skipped_key(self, tmp_path):  # N5
+        r = check_p5(str(tmp_path / "不存在.docx"), [str(tmp_path)])
+        assert "skipped" in r and r["student_files"] == []
+
+    def test_non_office_std_includes_skipped_key(self, tmp_path):  # N5
+        f = tmp_path / "std.txt"
+        f.write_text("x", encoding="utf-8")
+        r = check_p5(str(f), [str(tmp_path)])
+        assert "skipped" in r and "非 office" in r["error"]
 
 
 # ------------------------------------------------------------------ locate

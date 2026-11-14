@@ -2,7 +2,9 @@
 """docx 批注导出（可选产物 P7）：在作业文档副本中写入 Word 批注（w:comment）。
 
 参考 GradingServer `annotate.py` 的 OOXML 注入方案，参数化并去除 grading 依赖：
-- word/document.xml：目标段落前插 w:commentRangeStart、段末追加 w:commentReference run、段后 w:commentRangeEnd
+- word/document.xml：目标段落的 pPr 之后插入 w:commentRangeStart，段末追加
+  w:commentReference run 与 w:commentRangeEnd——三者均在 w:p 内部（符合 OOXML
+  段落内容级元素约束；同段多批注形成合法嵌套区间，不交叉）
 - word/comments.xml：新建（w:comments → w:comment，author/date/批注文本）
 - [Content_Types].xml：注册 comments 部件
 - word/_rels/document.xml.rels：添加 comments 关系

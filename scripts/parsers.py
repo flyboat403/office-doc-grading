@@ -300,7 +300,6 @@ def _word_part(zf, name):
 def _parse_word(zf, data):
     from docx import Document
     from docx.enum.section import WD_ORIENT
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     doc = Document(BytesIO(data))
     paragraphs = []
@@ -376,13 +375,17 @@ def _parse_word(zf, data):
                            "position": None, "shadow": False})
     except Exception:
         pass
+    # 修正（2026-11-14 复审 N1）：textbox_texts 提到 try 外初始化——旧实现外层
+    # except 会把它清空：处理第 N 个 anchor 抛异常时，前 N-1 个已收集的题注文本
+    # 全丢（同块已 append 的 images 却保留，恢复不一致），caption 原语可能因此
+    # false FAIL。现在外层异常只记 debug，保留已收集值。
+    textbox_texts = []
     try:
         # 浮动对象（w:drawing/wp:anchor）：图片计入 images，文本框文字计入 textbox_texts
         ns = {"wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
               "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
               "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
               "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-        textbox_texts = []
         for anc in doc.element.findall(".//w:drawing/wp:anchor", ns):
             wrap = None
             for wt in ("wp:wrapSquare", "wp:wrapTight", "wp:wrapTopAndBottom",
@@ -426,8 +429,8 @@ def _parse_word(zf, data):
                 w, h = _cm(ext.get("cx")), _cm(ext.get("cy"))
             images.append({"index": len(images), "width_cm": w, "height_cm": h,
                            "wrap": wrap, "position": pos, "shadow": shadow})
-    except Exception:
-        textbox_texts = []
+    except Exception as e:
+        _dbg("floating objects scan failed: %s" % e)
 
     sections = []
     try:

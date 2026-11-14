@@ -97,11 +97,12 @@ def check_p5(std_path, student_paths):
     """
     std = Path(std_path).resolve()
     if not std.exists():
+        # 修正（2026-11-14 复审 N5）：早退返回补齐 skipped 键，与成功路径字段一致
         return {"ok": False, "error": "标准文档不存在: %s" % std,
-                "student_files": []}
+                "student_files": [], "skipped": []}
     if not is_office(std):
         return {"ok": False, "error": "标准文档非 office 类型: %s" % std,
-                "student_files": []}
+                "student_files": [], "skipped": []}
     # Windows 路径大小写不敏感：normcase 后比较，避免同文件不同写法绕过自评拦截
     std_key = os.path.normcase(str(std))
 

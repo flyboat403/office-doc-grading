@@ -23,11 +23,16 @@ def normalize_weights(criteria, total=100):
         return [], 0.0, False
     s = sum(c.get("weight", 0) for c in criteria) or 1
     if s == total:
-        # 早退分支同样执行非正权重钳制（此前 0/负权重会原样放行）
-        return [dict(c, weight=1) if (not isinstance(c.get("weight"), (int, float))
-                                      or isinstance(c.get("weight"), bool)
-                                      or c["weight"] <= 0) else c
-                for c in criteria], 0.0, False
+        # 早退分支同样执行非正权重钳制（此前 0/负权重会原样放行）。
+        # 修正（2026-11-14 复审 N4）：钳制会改变权重和（如 [0,100]→[1,100]），
+        # dev 必须按钳制后的实际和重算，不能仍报 0.0。
+        fixed = [dict(c, weight=1) if (not isinstance(c.get("weight"), (int, float))
+                                       or isinstance(c.get("weight"), bool)
+                                       or c["weight"] <= 0) else c
+                 for c in criteria]
+        s2 = sum(c["weight"] for c in fixed)
+        dev = abs(s2 - total) / total
+        return fixed, round(dev, 3), dev > 0.5
     scale = total / s
     norm, fracs = [], []
     for c in criteria:
